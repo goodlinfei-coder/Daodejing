@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import ChapterNavigation from './components/ChapterNavigation';
 import ReaderView from './components/ReaderView';
 import { ChapterContent, BookmarkState, LoadingState } from './types';
-import { fetchChapterContent, generateSpeech } from './services/geminiService';
+import { fetchChapterContent, speakText, stopSpeech } from './services/geminiService';
 
 const App: React.FC = () => {
   const [currentChapterNum, setCurrentChapterNum] = useState<number>(1);
@@ -11,12 +11,8 @@ const App: React.FC = () => {
   const [isNavOpen, setIsNavOpen] = useState<boolean>(false);
   const [bookmarks, setBookmarks] = useState<BookmarkState>({});
   
-  // Audio Refs (Gemini)
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const sourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
-  
-  // Audio Refs (Browser TTS fallback)
-  const isBrowserTTSPlayingRef = useRef<boolean>(false);
+  // Track browser TTS state
+  const isPlayingRef = useRef<boolean>(false);
 
   // Load bookmarks from local storage on mount
   useEffect(() => {
@@ -63,22 +59,8 @@ const App: React.FC = () => {
 
   // Handle Audio
   const stopAudio = () => {
-    // Stop Gemini Audio
-    if (sourceNodeRef.current) {
-      try {
-        sourceNodeRef.current.stop();
-      } catch (e) { 
-        // ignore error if already stopped 
-      }
-      sourceNodeRef.current = null;
-    }
-    
-    // Stop Browser TTS
-    if (window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-        isBrowserTTSPlayingRef.current = false;
-    }
-
+    stopSpeech();
+    isPlayingRef.current = false;
     if (loadingState === LoadingState.PLAYING || loadingState === LoadingState.LOADING_AUDIO) {
         setLoadingState(LoadingState.IDLE);
     }
@@ -92,72 +74,33 @@ const App: React.FC = () => {
 
     if (!content) return;
 
-    setLoadingState(LoadingState.LOADING_AUDIO);
-
-    try {
-      const audioBuffer = await generateSpeech(content.originalText);
-      
-      // --- GEMINI AUDIO PATH ---
-      if (!audioContextRef.current) {
-        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
-      }
-
-      if (audioContextRef.current.state === 'suspended') {
-        await audioContextRef.current.resume();
-      }
-
-      const source = audioContextRef.current.createBufferSource();
-      source.buffer = audioBuffer;
-      source.connect(audioContextRef.current.destination);
-      
-      source.onended = () => {
-        setLoadingState(LoadingState.IDLE);
-        sourceNodeRef.current = null;
-      };
-
-      source.start();
-      sourceNodeRef.current = source;
-      setLoadingState(LoadingState.PLAYING);
-
-    } catch (error: any) {
-      // Check for the specific fallback signal or generic error
-      if (error.message === 'USE_BROWSER_TTS' || !process.env.API_KEY) {
-        // --- BROWSER TTS FALLBACK PATH ---
-        if (!window.speechSynthesis) {
-           alert("您的浏览器不支持语音朗读功能。");
-           setLoadingState(LoadingState.IDLE);
-           return;
-        }
-
-        const utterance = new SpeechSynthesisUtterance(content.originalText);
-        utterance.lang = 'zh-CN';
-        utterance.rate = 0.8; // Slower for ancient text
-        
-        utterance.onend = () => {
-            setLoadingState(LoadingState.IDLE);
-            isBrowserTTSPlayingRef.current = false;
-        };
-        
-        utterance.onerror = (e) => {
-            console.error("Browser TTS Error", e);
-            setLoadingState(LoadingState.IDLE);
-            isBrowserTTSPlayingRef.current = false;
-        };
-
-        isBrowserTTSPlayingRef.current = true;
-        setLoadingState(LoadingState.PLAYING);
-        window.speechSynthesis.speak(utterance);
-        
-      } else {
-        console.error("Audio playback failed", error);
-        setLoadingState(LoadingState.IDLE); 
-        alert("语音生成失败，请稍后重试。");
-      }
+    // Check browser support
+    if (!window.speechSynthesis) {
+        alert("您的浏览器不支持语音朗读功能。");
+        return;
     }
+
+    setLoadingState(LoadingState.PLAYING);
+    isPlayingRef.current = true;
+
+    speakText(
+        content.originalText, 
+        () => {
+            // onEnd
+            setLoadingState(LoadingState.IDLE);
+            isPlayingRef.current = false;
+        },
+        (e) => {
+            // onError
+            console.error("TTS Error", e);
+            setLoadingState(LoadingState.IDLE);
+            isPlayingRef.current = false;
+        }
+    );
   };
 
   return (
-    <div className="flex h-screen bg-stone-100 overflow-hidden">
+    <div className="flex h-screen w-full bg-stone-100 overflow-hidden">
       
       <ChapterNavigation 
         currentChapter={currentChapterNum}
@@ -168,9 +111,9 @@ const App: React.FC = () => {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 h-full overflow-y-auto relative w-full scroll-smooth">
+      <main className="flex-1 h-full overflow-y-auto relative w-full scroll-smooth flex flex-col">
         {/* Mobile Header Toggle */}
-        <div className="sticky top-0 z-30 lg:hidden bg-stone-100/90 backdrop-blur-md border-b border-stone-200 px-4 py-3 flex justify-between items-center">
+        <div className="sticky top-0 z-30 lg:hidden bg-stone-100/90 backdrop-blur-md border-b border-stone-200 px-4 py-3 flex justify-between items-center flex-none">
           <button 
             onClick={() => setIsNavOpen(true)}
             className="p-2 -ml-2 text-stone-600 hover:text-stone-900"
@@ -180,22 +123,22 @@ const App: React.FC = () => {
             </svg>
           </button>
           <span className="font-calligraphy text-lg">道德经</span>
-          <div className="w-8"></div> {/* Spacer for alignment */}
+          <div className="w-8"></div>
         </div>
 
-        <ReaderView 
-          content={content}
-          loadingState={loadingState}
-          isBookmarked={!!bookmarks[currentChapterNum]}
-          onToggleBookmark={toggleBookmark}
-          onPlayAudio={playAudio}
-        />
+        <div className="flex-1">
+            <ReaderView 
+            content={content}
+            loadingState={loadingState}
+            isBookmarked={!!bookmarks[currentChapterNum]}
+            onToggleBookmark={toggleBookmark}
+            onPlayAudio={playAudio}
+            />
+        </div>
         
         {/* Footer */}
-        <footer className="py-8 text-center text-stone-400 text-sm font-serif">
-          <p>
-            {process.env.API_KEY ? "AI 深度语音" : "浏览器离线朗读"}
-          </p>
+        <footer className="py-6 text-center text-stone-400 text-sm font-serif flex-none bg-stone-100 border-t border-stone-200">
+          <p>离线模式 · 浏览器语音朗读</p>
           <p className="mt-1">大道至简 · 悟在心中</p>
         </footer>
       </main>

@@ -1,24 +1,17 @@
-import { GoogleGenAI, Modality } from "@google/genai";
 import { ChapterContent } from "../types";
 import { fullContent } from "../data/fullContent";
 
-// Initialize Gemini Client
-const apiKey = process.env.API_KEY;
-const ai = apiKey ? new GoogleGenAI({ apiKey: apiKey }) : null;
-
 /**
- * Fetches the text, translation, and analysis for a specific chapter.
- * Uses local data exclusively for text content.
+ * Fetches the text, translation, and analysis for a specific chapter from local data.
  */
 export const fetchChapterContent = async (chapterNumber: number): Promise<ChapterContent> => {
-  // Directly access the local full content database
   const localData = fullContent[chapterNumber];
 
   if (localData) {
     return Promise.resolve(localData);
   }
 
-  // Fallback (should typically not happen if fullContent is complete)
+  // Fallback
   return Promise.resolve({
     chapterNumber,
     title: `第 ${chapterNumber} 章`,
@@ -30,64 +23,26 @@ export const fetchChapterContent = async (chapterNumber: number): Promise<Chapte
 };
 
 /**
- * Generates audio.
- * Strategy: 
- * 1. If API Key exists -> Use Gemini High Quality TTS.
- * 2. If NO API Key -> Throw specific error to trigger Browser Native SpeechSynthesis in App.tsx.
+ * Wrapper for Browser Native TTS.
+ * Not strictly necessary as App.tsx can call window.speechSynthesis directly,
+ * but kept for architectural consistency if we wanted to add more logic later.
  */
-export const generateSpeech = async (text: string): Promise<AudioBuffer> => {
-  // --- OPTION 1: Gemini AI TTS (Requires API Key) ---
-  if (ai) {
-    try {
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash-preview-tts",
-        contents: [{ parts: [{ text: text }] }],
-        config: {
-          responseModalities: [Modality.AUDIO],
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: { voiceName: 'Fenrir' }, 
-            },
-          },
-        },
-      });
+export const speakText = (text: string, onEnd: () => void, onError: (e: any) => void): SpeechSynthesisUtterance => {
+  // Cancel any ongoing speech
+  window.speechSynthesis.cancel();
 
-      const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-      if (!base64Audio) throw new Error("No audio data from AI");
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = 'zh-CN';
+  utterance.rate = 0.85; // Slightly slower for classical text
+  utterance.pitch = 1.0;
+  
+  utterance.onend = onEnd;
+  utterance.onerror = onError;
 
-      return await decodeBase64Audio(base64Audio);
-    } catch (error) {
-      console.warn("Gemini TTS failed or configured incorrectly, falling back to browser TTS:", error);
-      // Fall through to error triggering browser TTS
-    }
-  }
-
-  // --- OPTION 2: Trigger Browser Native TTS (Fallback) ---
-  // We throw a specific error that App.tsx listens for.
-  throw new Error("USE_BROWSER_TTS");
+  window.speechSynthesis.speak(utterance);
+  return utterance;
 };
 
-// Helper for Gemini Audio Decoding
-async function decodeBase64Audio(base64: string): Promise<AudioBuffer> {
-  const binaryString = atob(base64);
-  const len = binaryString.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-
-  const sampleRate = 24000;
-  const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-  const audioContext = new AudioContextClass({ sampleRate });
-  
-  const numSamples = Math.floor(bytes.length / 2);
-  const dataInt16 = new Int16Array(bytes.buffer, 0, numSamples);
-  
-  const audioBuffer = audioContext.createBuffer(1, numSamples, sampleRate);
-  const channelData = audioBuffer.getChannelData(0);
-  
-  for (let i = 0; i < numSamples; i++) {
-    channelData[i] = dataInt16[i] / 32768.0;
-  }
-  return audioBuffer;
-}
+export const stopSpeech = () => {
+  window.speechSynthesis.cancel();
+};

@@ -34,12 +34,11 @@ const ChapterNavigation: React.FC<ChapterNavigationProps> = ({
       )}
 
       {/* Drawer Container */}
-      {/* Updated CSS for scrolling: h-full and max-h-screen ensure it fills the parent flex container height */}
       <aside className={`
         fixed inset-y-0 left-0 w-72 bg-[#faf9f6] border-r border-stone-200 z-50 transform transition-transform duration-300 ease-in-out flex flex-col shadow-xl lg:shadow-none
         ${isOpen ? 'translate-x-0' : '-translate-x-full'}
         lg:translate-x-0 lg:static lg:block
-        h-full max-h-screen overflow-hidden
+        h-full max-h-screen
       `}>
         {/* Header - Fixed at top of drawer */}
         <div className="flex-none p-6 border-b border-stone-200 flex justify-between items-center bg-[#faf9f6]">
@@ -57,7 +56,7 @@ const ChapterNavigation: React.FC<ChapterNavigationProps> = ({
         {/* Scrollable List 
             Using flex-1 and overflow-y-auto ensures this section takes available space and scrolls internally.
         */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin hover:scrollbar-thumb-stone-400">
           <div className="p-3 space-y-1 pb-20">
             {chapters.map(({ num, title }) => (
               <button
