@@ -26,6 +26,25 @@ const App: React.FC = () => {
     }
   }, []);
 
+  // Keyboard Navigation Support
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if modifiers are pressed
+      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+
+      if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+        e.preventDefault(); // Prevent page scroll
+        setCurrentChapterNum(prev => (prev < 81 ? prev + 1 : prev));
+      } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+        e.preventDefault(); // Prevent page scroll
+        setCurrentChapterNum(prev => (prev > 1 ? prev - 1 : prev));
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   // Fetch content when chapter changes
   useEffect(() => {
     const loadChapter = async () => {
@@ -66,7 +85,8 @@ const App: React.FC = () => {
     }
   };
 
-  const playAudio = async () => {
+  // REMOVED 'async' keyword to ensure strict user-gesture association for Mobile Browsers
+  const playAudio = () => {
     if (loadingState === LoadingState.PLAYING) {
       stopAudio();
       return;

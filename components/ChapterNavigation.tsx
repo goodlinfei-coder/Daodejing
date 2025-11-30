@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BookmarkState } from '../types';
 import { chapterTitles } from '../data/chapterTitles';
 
@@ -23,6 +23,20 @@ const ChapterNavigation: React.FC<ChapterNavigationProps> = ({
     title
   }));
 
+  // Auto-scroll active chapter into view
+  useEffect(() => {
+    // Only scroll if the drawer is visible (desktop or mobile open)
+    if (isOpen || window.innerWidth >= 1024) {
+      const activeElement = document.getElementById(`chapter-nav-${currentChapter}`);
+      if (activeElement) {
+        activeElement.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center', // Scroll to center so user sees surrounding context
+        });
+      }
+    }
+  }, [currentChapter, isOpen]);
+
   return (
     <>
       {/* Backdrop for mobile */}
@@ -38,7 +52,7 @@ const ChapterNavigation: React.FC<ChapterNavigationProps> = ({
         fixed inset-y-0 left-0 w-72 bg-[#faf9f6] border-r border-stone-200 z-50 transform transition-transform duration-300 ease-in-out flex flex-col shadow-xl lg:shadow-none
         ${isOpen ? 'translate-x-0' : '-translate-x-full'}
         lg:translate-x-0 lg:static lg:block
-        h-full max-h-screen
+        h-full overflow-hidden
       `}>
         {/* Header - Fixed at top of drawer */}
         <div className="flex-none p-6 border-b border-stone-200 flex justify-between items-center bg-[#faf9f6]">
@@ -53,14 +67,13 @@ const ChapterNavigation: React.FC<ChapterNavigationProps> = ({
           </button>
         </div>
         
-        {/* Scrollable List 
-            Using flex-1 and overflow-y-auto ensures this section takes available space and scrolls internally.
-        */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin hover:scrollbar-thumb-stone-400">
+        {/* Scrollable List */}
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-thin hover:scrollbar-thumb-stone-400 overscroll-contain">
           <div className="p-3 space-y-1 pb-20">
             {chapters.map(({ num, title }) => (
               <button
                 key={num}
+                id={`chapter-nav-${num}`} // Add ID for scrollIntoView
                 onClick={() => {
                   onSelectChapter(num);
                   if (window.innerWidth < 1024) {
@@ -68,7 +81,7 @@ const ChapterNavigation: React.FC<ChapterNavigationProps> = ({
                   }
                 }}
                 className={`
-                  w-full text-left px-4 py-3 rounded-lg flex items-center justify-between group transition-all duration-200
+                  w-full text-left px-4 py-3 rounded-lg flex items-center justify-between group transition-all duration-200 focus:outline-none
                   ${currentChapter === num 
                     ? 'bg-amber-100/60 text-amber-900 shadow-sm border border-amber-200/50' 
                     : 'hover:bg-stone-200/50 text-stone-600 border border-transparent'}
