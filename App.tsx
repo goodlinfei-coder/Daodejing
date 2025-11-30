@@ -11,9 +11,12 @@ const App: React.FC = () => {
   const [isNavOpen, setIsNavOpen] = useState<boolean>(false);
   const [bookmarks, setBookmarks] = useState<BookmarkState>({});
   
-  // Audio Refs
+  // Audio Refs (Gemini)
   const audioContextRef = useRef<AudioContext | null>(null);
   const sourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
+  
+  // Audio Refs (Browser TTS fallback)
+  const isBrowserTTSPlayingRef = useRef<boolean>(false);
 
   // Load bookmarks from local storage on mount
   useEffect(() => {
@@ -60,6 +63,7 @@ const App: React.FC = () => {
 
   // Handle Audio
   const stopAudio = () => {
+    // Stop Gemini Audio
     if (sourceNodeRef.current) {
       try {
         sourceNodeRef.current.stop();
@@ -68,6 +72,13 @@ const App: React.FC = () => {
       }
       sourceNodeRef.current = null;
     }
+    
+    // Stop Browser TTS
+    if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+        isBrowserTTSPlayingRef.current = false;
+    }
+
     if (loadingState === LoadingState.PLAYING || loadingState === LoadingState.LOADING_AUDIO) {
         setLoadingState(LoadingState.IDLE);
     }
@@ -86,11 +97,11 @@ const App: React.FC = () => {
     try {
       const audioBuffer = await generateSpeech(content.originalText);
       
+      // --- GEMINI AUDIO PATH ---
       if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
       }
 
-      // Resume context if suspended (browser policy)
       if (audioContextRef.current.state === 'suspended') {
         await audioContextRef.current.resume();
       }
@@ -108,10 +119,33 @@ const App: React.FC = () => {
       sourceNodeRef.current = source;
       setLoadingState(LoadingState.PLAYING);
 
-    } catch (error) {
-      console.error("Audio playback failed", error);
-      setLoadingState(LoadingState.IDLE); // Reset on error
-      alert("语音生成失败，请稍后重试。");
+    } catch (error: any) {
+      if (error.message === 'USE_BROWSER_TTS') {
+        // --- BROWSER TTS FALLBACK PATH ---
+        const utterance = new SpeechSynthesisUtterance(content.originalText);
+        utterance.lang = 'zh-CN';
+        utterance.rate = 0.9; // Slightly slower for better recitation
+        
+        utterance.onend = () => {
+            setLoadingState(LoadingState.IDLE);
+            isBrowserTTSPlayingRef.current = false;
+        };
+        
+        utterance.onerror = () => {
+            setLoadingState(LoadingState.IDLE);
+            isBrowserTTSPlayingRef.current = false;
+            alert("语音合成失败");
+        };
+
+        isBrowserTTSPlayingRef.current = true;
+        setLoadingState(LoadingState.PLAYING);
+        window.speechSynthesis.speak(utterance);
+        
+      } else {
+        console.error("Audio playback failed", error);
+        setLoadingState(LoadingState.IDLE); 
+        alert("语音生成失败，请稍后重试。");
+      }
     }
   };
 
@@ -152,7 +186,9 @@ const App: React.FC = () => {
         
         {/* Footer */}
         <footer className="py-8 text-center text-stone-400 text-sm font-serif">
-          <p>由 Google Gemini AI 驱动</p>
+          <p>
+            {process.env.API_KEY ? "AI 语音驱动" : "离线阅读模式 (浏览器语音)"}
+          </p>
           <p className="mt-1">大道至简 · 悟在心中</p>
         </footer>
       </main>

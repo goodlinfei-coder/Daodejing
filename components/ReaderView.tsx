@@ -20,7 +20,26 @@ const ReaderView: React.FC<ReaderViewProps> = ({
     return (
       <div className="flex flex-col items-center justify-center h-full min-h-[50vh] space-y-4 animate-pulse">
         <div className="w-16 h-16 border-4 border-amber-200 border-t-amber-600 rounded-full animate-spin"></div>
-        <p className="text-stone-500 font-serif text-lg">正在悟道...</p>
+        <p className="text-stone-500 font-serif text-lg">正在翻阅...</p>
+      </div>
+    );
+  }
+
+  if (loadingState === LoadingState.ERROR) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full min-h-[50vh] px-4 text-center space-y-4">
+         <div className="text-red-400 bg-red-50 p-4 rounded-full">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+            </svg>
+         </div>
+         <h3 className="text-xl font-serif text-stone-700">加载失败</h3>
+         <button 
+           onClick={() => window.location.reload()}
+           className="mt-4 px-6 py-2 bg-stone-800 text-stone-100 rounded-lg hover:bg-stone-700 transition-colors"
+         >
+           重试
+         </button>
       </div>
     );
   }
@@ -37,7 +56,7 @@ const ReaderView: React.FC<ReaderViewProps> = ({
   const isLoadingAudio = loadingState === LoadingState.LOADING_AUDIO;
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8 lg:py-12 space-y-12">
+    <div className="max-w-3xl mx-auto px-4 py-8 lg:py-12 space-y-12 pb-24">
       
       {/* Header Section */}
       <header className="text-center space-y-4 border-b-2 border-stone-200 pb-8 relative">
@@ -87,7 +106,7 @@ const ReaderView: React.FC<ReaderViewProps> = ({
             {isLoadingAudio ? (
               <>
                 <div className="w-4 h-4 border-2 border-stone-400 border-t-stone-800 rounded-full animate-spin"></div>
-                生成语音中...
+                生成中...
               </>
             ) : isPlaying ? (
               <>
