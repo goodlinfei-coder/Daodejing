@@ -1,7 +1,6 @@
 import { GoogleGenAI, Modality } from "@google/genai";
 import { ChapterContent } from "../types";
 import { fullContent } from "../data/fullContent";
-import { chapterTitles } from "../data/chapterTitles";
 
 // Initialize Gemini Client
 const apiKey = process.env.API_KEY;
@@ -9,27 +8,24 @@ const ai = apiKey ? new GoogleGenAI({ apiKey: apiKey }) : null;
 
 /**
  * Fetches the text, translation, and analysis for a specific chapter.
- * NOW USES LOCAL DATA.
+ * Uses local data exclusively for text content.
  */
 export const fetchChapterContent = async (chapterNumber: number): Promise<ChapterContent> => {
-  // Simulate a very short network delay for UI smoothness, or return instantly
-  // Using local data from fullContent.ts
+  // Directly access the local full content database
   const localData = fullContent[chapterNumber];
 
   if (localData) {
     return Promise.resolve(localData);
   }
 
-  // Fallback for chapters not yet in the fullContent file
-  // This ensures the app doesn't crash for chapters 4-81
-  const title = chapterTitles[chapterNumber - 1] || `第 ${chapterNumber} 章`;
+  // Fallback (should typically not happen if fullContent is complete)
   return Promise.resolve({
     chapterNumber,
-    title,
-    originalText: "（该章节内容尚未录入本地数据库）\n\n请在 data/fullContent.ts 文件中补充该章节的原文、译文和解析。",
+    title: `第 ${chapterNumber} 章`,
+    originalText: "内容加载中...",
     translation: "暂无译文",
     analysis: "暂无解析",
-    keywords: ["待录入"]
+    keywords: []
   });
 };
 
@@ -37,7 +33,7 @@ export const fetchChapterContent = async (chapterNumber: number): Promise<Chapte
  * Generates audio.
  * Strategy: 
  * 1. If API Key exists -> Use Gemini High Quality TTS.
- * 2. If NO API Key -> Use Browser Native SpeechSynthesis (Offline/Free).
+ * 2. If NO API Key -> Throw specific error to trigger Browser Native SpeechSynthesis in App.tsx.
  */
 export const generateSpeech = async (text: string): Promise<AudioBuffer> => {
   // --- OPTION 1: Gemini AI TTS (Requires API Key) ---
@@ -61,38 +57,14 @@ export const generateSpeech = async (text: string): Promise<AudioBuffer> => {
 
       return await decodeBase64Audio(base64Audio);
     } catch (error) {
-      console.warn("Gemini TTS failed, falling back to browser TTS:", error);
-      // Fall through to browser TTS
+      console.warn("Gemini TTS failed or configured incorrectly, falling back to browser TTS:", error);
+      // Fall through to error triggering browser TTS
     }
   }
 
-  // --- OPTION 2: Browser Native TTS (Fallback) ---
-  return new Promise((resolve, reject) => {
-    if (!window.speechSynthesis) {
-      reject(new Error("Browser does not support speech synthesis"));
-      return;
-    }
-
-    // Browser TTS doesn't give us an AudioBuffer directly easily without complex recording.
-    // However, to keep the App component simple (which expects an AudioBuffer), 
-    // we have a dilemma. 
-    // TRICK: We will throw a specific error that the UI handles by calling a direct `speak` method,
-    // OR we change the pattern. 
-    // BETTER: We can't easily return an AudioBuffer from `speechSynthesis.speak()`.
-    // So we will return a "dummy" silent AudioBuffer and handle the actual speaking here? 
-    // No, `AudioContext` is required for the visualizer/control in App.tsx.
-    
-    // ADJUSTMENT: Since the user wants "Read Aloud" and the current App.tsx logic is 
-    // heavily tied to `AudioBufferSourceNode`, mixing both is tricky.
-    // BUT, let's try to stick to the Gemini approach first. 
-    // If we want to support browser TTS, we usually need to change App.tsx to handle it.
-    
-    // FOR THIS UPDATE: I will assume the user prefers the Gemini Quality if possible, 
-    // but if they really want NO API KEY, we must change App.tsx to support `window.speechSynthesis`.
-    // I will throw a specific error code that App.tsx can catch to trigger browser TTS.
-    
-    reject(new Error("USE_BROWSER_TTS"));
-  });
+  // --- OPTION 2: Trigger Browser Native TTS (Fallback) ---
+  // We throw a specific error that App.tsx listens for.
+  throw new Error("USE_BROWSER_TTS");
 };
 
 // Helper for Gemini Audio Decoding

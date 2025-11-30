@@ -120,21 +120,28 @@ const App: React.FC = () => {
       setLoadingState(LoadingState.PLAYING);
 
     } catch (error: any) {
-      if (error.message === 'USE_BROWSER_TTS') {
+      // Check for the specific fallback signal or generic error
+      if (error.message === 'USE_BROWSER_TTS' || !process.env.API_KEY) {
         // --- BROWSER TTS FALLBACK PATH ---
+        if (!window.speechSynthesis) {
+           alert("您的浏览器不支持语音朗读功能。");
+           setLoadingState(LoadingState.IDLE);
+           return;
+        }
+
         const utterance = new SpeechSynthesisUtterance(content.originalText);
         utterance.lang = 'zh-CN';
-        utterance.rate = 0.9; // Slightly slower for better recitation
+        utterance.rate = 0.8; // Slower for ancient text
         
         utterance.onend = () => {
             setLoadingState(LoadingState.IDLE);
             isBrowserTTSPlayingRef.current = false;
         };
         
-        utterance.onerror = () => {
+        utterance.onerror = (e) => {
+            console.error("Browser TTS Error", e);
             setLoadingState(LoadingState.IDLE);
             isBrowserTTSPlayingRef.current = false;
-            alert("语音合成失败");
         };
 
         isBrowserTTSPlayingRef.current = true;
@@ -161,7 +168,7 @@ const App: React.FC = () => {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 h-full overflow-y-auto relative w-full">
+      <main className="flex-1 h-full overflow-y-auto relative w-full scroll-smooth">
         {/* Mobile Header Toggle */}
         <div className="sticky top-0 z-30 lg:hidden bg-stone-100/90 backdrop-blur-md border-b border-stone-200 px-4 py-3 flex justify-between items-center">
           <button 
@@ -187,7 +194,7 @@ const App: React.FC = () => {
         {/* Footer */}
         <footer className="py-8 text-center text-stone-400 text-sm font-serif">
           <p>
-            {process.env.API_KEY ? "AI 语音驱动" : "离线阅读模式 (浏览器语音)"}
+            {process.env.API_KEY ? "AI 深度语音" : "浏览器离线朗读"}
           </p>
           <p className="mt-1">大道至简 · 悟在心中</p>
         </footer>
